@@ -26,6 +26,11 @@
 
 /* Print Styles */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 8mm 12mm 8mm;
+  }
+
   /* Hide non-printable elements */
   .no-print,
   aside,
@@ -35,16 +40,26 @@
   .topbar,
   .action-buttons,
   .toast-container,
-  button:not(.print-include) {
+  button:not(.print-include),
+  input,
+  select,
+  textarea {
     display: none !important;
+  }
+
+  /* Reset layout margins for print */
+  div[class*="lg:mr-"] {
+    margin-right: 0 !important;
   }
 
   body {
     background: white !important;
-    color: black !important;
-    font-size: 11pt !important;
+    color: #0f172a !important;
+    font-size: 9.5pt !important;
     padding: 0 !important;
     margin: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   main {
@@ -59,33 +74,58 @@
   }
 
   .print-break-inside-avoid {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .print-page-break {
-    page-break-after: always;
+    page-break-after: always !important;
   }
 
-  .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl {
+  .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xs, .shadow-xs {
     box-shadow: none !important;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid #cbd5e1 !important;
   }
 
   table {
     width: 100% !important;
     border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  /* Multi-page table headers repeat on every page */
+  thead {
+    display: table-header-group !important;
+  }
+
+  tbody {
+    display: table-row-group !important;
+  }
+
+  /* Table footers appear ONLY ONCE at the end of the table, not on every page */
+  tfoot {
+    display: table-row-group !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Prevent row splitting across pages */
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   th, td {
     border: 1px solid #cbd5e1 !important;
-    padding: 6px 8px !important;
-    font-size: 10pt !important;
+    padding: 5px 6px !important;
+    font-size: 8.5pt !important;
+    line-height: 1.25 !important;
   }
 
   th {
-    background-color: #f8fafc !important;
+    background-color: #f1f5f9 !important;
     color: #0f172a !important;
+    font-weight: 700 !important;
   }
 }
 

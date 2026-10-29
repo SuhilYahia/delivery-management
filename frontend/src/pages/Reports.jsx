@@ -106,6 +106,30 @@ export default function Reports() {
     setSearchParams(params);
   };
 
+  // معالجة تغيير الفلاتر ومزامنة معرف الموصل في الرابط
+  const handleFilterChange = (newFilters) => {
+    setFilters(newFilters);
+    const params = new URLSearchParams(searchParams);
+    if (newFilters.driverId) {
+      params.set('driverId', newFilters.driverId);
+    } else {
+      params.delete('driverId');
+    }
+    setSearchParams(params);
+  };
+
+  // اختيار موصل محدد لكشف الحساب
+  const handleDriverSelect = (driverId) => {
+    setFilters(prev => ({ ...prev, driverId }));
+    const params = new URLSearchParams(searchParams);
+    if (driverId) {
+      params.set('driverId', driverId);
+    } else {
+      params.delete('driverId');
+    }
+    setSearchParams(params);
+  };
+
   // تصفية المشاوير بناءً على الفلاتر النشطة (الفترة الزمنية، الموصل، الحالة)
   const filteredTrips = useMemo(() => {
     return trips.filter(trip => {
@@ -198,6 +222,64 @@ export default function Reports() {
   // موصل محدد للتقرير التفصيلي
   const selectedDriver = drivers.find(d => d.id === filters.driverId) || drivers[0];
 
+  // موصل محدد للتقرير المالي كشف الحساب
+  const selectedFinancialDriver = useMemo(() => {
+    if (!filters.driverId) return null;
+    return drivers.find(d => d.id === filters.driverId) || null;
+  }, [drivers, filters.driverId]);
+
+  // تصفية واستبعاد التكرارات لسجلات التقرير المالي
+  const financialTrips = useMemo(() => {
+    const baseList = filteredTrips.filter(trip => {
+      // استبعاد المشاوير الملغاة ما لم يتم تفعيل خيار تضمينها
+      if (!includeCancelledInFinance && trip.status === 'cancelled') {
+        return false;
+      }
+      return true;
+    });
+
+    // استبعاد السجلات المكررة بناءً على المعرف الفريد للطلب أو رقم المشوار
+    const seen = new Set();
+    const uniqueList = [];
+    for (const trip of baseList) {
+      const key = trip.id || trip.tripNumber;
+      if (key) {
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueList.push(trip);
+        }
+      } else {
+        uniqueList.push(trip);
+      }
+    }
+
+    return uniqueList;
+  }, [filteredTrips, includeCancelledInFinance]);
+
+  // الحسابات المالية الدقيقة لكشف الحساب
+  const financialTotals = useMemo(() => {
+    let totalCost = 0;
+    let totalPaid = 0;
+    let totalRemaining = 0;
+
+    financialTrips.forEach(trip => {
+      const cost = Number(trip.cost) || 0;
+      const paid = Number(trip.paidAmount) || 0;
+      const remaining = Math.max(0, cost - paid);
+
+      totalCost += cost;
+      totalPaid += paid;
+      totalRemaining += remaining;
+    });
+
+    return {
+      totalTrips: financialTrips.length,
+      totalCost,
+      totalPaid,
+      totalRemaining,
+    };
+  }, [financialTrips]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -217,6 +299,47 @@ export default function Reports() {
 
   // تصدير CSV حسب التقرير الحالي
   const handleExportCSV = () => {
+    if (currentTab === 'financial') {
+      const isSingleDriver = !!selectedFinancialDriver;
+      const cols = isSingleDriver
+        ? [
+            { key: 'tripNumber', label: 'رقم المشوار' },
+            { key: 'tripDate', label: 'تاريخ المشوار' },
+            { key: 'customerName', label: 'اسم العميل' },
+            { key: 'deliveryStatus', label: 'حالة الاستلام', formatter: (v) => DELIVERY_STATUS_CONFIG[v]?.label || v },
+            { key: 'paymentMethod', label: 'طريقة الدفع', formatter: (v) => PAYMENT_METHODS.find(m => m.id === v)?.label || v },
+            { key: 'cost', label: 'تكلفة المشوار (ر.س)' },
+            { key: 'paidAmount', label: 'المبلغ المدفوع (ر.س)' },
+            {
+              key: 'remaining',
+              label: 'المتبقي (ر.س)',
+              formatter: (_, row) => Math.max(0, (Number(row.cost) || 0) - (Number(row.paidAmount) || 0)),
+            },
+          ]
+        : [
+            { key: 'tripNumber', label: 'رقم المشوار' },
+            { key: 'tripDate', label: 'تاريخ المشوار' },
+            { key: 'driverName', label: 'اسم الموصل' },
+            { key: 'customerName', label: 'اسم العميل' },
+            { key: 'deliveryStatus', label: 'حالة الاستلام', formatter: (v) => DELIVERY_STATUS_CONFIG[v]?.label || v },
+            { key: 'paymentMethod', label: 'طريقة الدفع', formatter: (v) => PAYMENT_METHODS.find(m => m.id === v)?.label || v },
+            { key: 'cost', label: 'تكلفة المشوار (ر.س)' },
+            { key: 'paidAmount', label: 'المبلغ المدفوع (ر.س)' },
+            {
+              key: 'remaining',
+              label: 'المتبقي (ر.س)',
+              formatter: (_, row) => Math.max(0, (Number(row.cost) || 0) - (Number(row.paidAmount) || 0)),
+            },
+          ];
+
+      const fileName = isSingleDriver
+        ? `كشف-حساب-الموصل-${selectedFinancialDriver.name}-${activeCompany?.name || ''}`
+        : `التقرير-المالي-${activeCompany?.name || ''}`;
+
+      exportToCSV(financialTrips, cols, fileName);
+      return;
+    }
+
     if (currentTab === 'driver_dues') {
       const cols = [
         { key: 'driverName', label: 'اسم الموصل' },
@@ -274,11 +397,12 @@ export default function Reports() {
           currentTab === 'all_drivers' ? 'تقرير أداء جميع الموصلين' :
           currentTab === 'driver' ? `تقرير أداء الموصل: ${selectedDriver?.name || ''}` :
           currentTab === 'delivery_status' ? 'تقرير حالة استلام الطلبات والتسليم' :
-          currentTab === 'financial' ? 'التقرير المالي وتكاليف التوصيل' :
+          currentTab === 'financial' ? (selectedFinancialDriver ? `كشف حساب الموصل: ${selectedFinancialDriver.name}` : 'التقرير المالي وكشوفات حساب الموصلين') :
           'تقرير المشاوير والتشغيل'
         }
         startDate={filters.startDate}
         endDate={filters.endDate}
+        driver={currentTab === 'financial' ? selectedFinancialDriver : null}
       />
 
       {/* الرأس التفاعلي للشاشة */}
@@ -300,7 +424,7 @@ export default function Reports() {
           { id: 'driver', label: 'تقرير موصل محدد', icon: BarChart3 },
           { id: 'date_summary', label: 'التقرير الدوري بالتواريخ', icon: Calendar },
           { id: 'delivery_status', label: 'تقرير حالة التسليم', icon: CheckCircle2 },
-          { id: 'financial', label: 'التقرير المالي والتكاليف', icon: DollarSign },
+          { id: 'financial', label: 'كشف حساب الموصل (التقرير المالي)', icon: DollarSign },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -324,7 +448,7 @@ export default function Reports() {
       {/* ================= شريط الفلاتر الموحد ================= */}
       <ReportFilterBar
         filters={filters}
-        onFilterChange={setFilters}
+        onFilterChange={handleFilterChange}
         onReset={handleResetFilters}
         onPrint={handlePrint}
         onExportCSV={handleExportCSV}
@@ -874,67 +998,330 @@ export default function Reports() {
         </div>
       )}
 
-      {/* 5. التقرير المالي */}
+      {/* 5. التقرير المالي — كشف حساب الموصل */}
       {currentTab === 'financial' && (
         <div className="space-y-6">
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between">
-            <div className="text-xs text-slate-500">
-              نطاق الحساب: <span className="font-bold text-slate-800">التكاليف التشغيلية للمشاوير غير الملغاة</span>
+          {/* شريط التحكم السريع واختيار الموصل — يظهر فقط على الشاشة no-print */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
+            <div className="flex items-center gap-3 flex-1 max-w-md">
+              <label className="text-xs font-black text-slate-800 whitespace-nowrap flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-brand-600" />
+                <span>اختيار الموصل:</span>
+              </label>
+              <select
+                value={filters.driverId || ''}
+                onChange={(e) => handleDriverSelect(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+              >
+                <option value="">-- جميع الموصلين (اختر موصل لعرض كشف حسابه) --</option>
+                {drivers.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} {d.phone ? `(${d.phone})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeCancelledInFinance}
-                onChange={(e) => setIncludeCancelledInFinance(e.target.checked)}
-                className="w-4 h-4 text-brand-600 rounded-sm"
-              />
-              <span>تضمين المشاوير الملغاة في الحساب المالي</span>
-            </label>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeCancelledInFinance}
+                  onChange={(e) => setIncludeCancelledInFinance(e.target.checked)}
+                  className="w-4 h-4 text-brand-600 rounded-sm"
+                />
+                <span>تضمين المشاوير الملغاة</span>
+              </label>
+
+              {selectedFinancialDriver && (
+                <button
+                  type="button"
+                  onClick={() => handleDriverSelect('')}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 transition underline"
+                >
+                  عرض جميع الموصلين
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition shadow-2xs"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>طباعة كشف الحساب (A4)</span>
+              </button>
+            </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-4">رقم المشوار</th>
-                  <th className="py-3 px-4">التاريخ</th>
-                  <th className="py-3 px-4">الموصل</th>
-                  <th className="py-3 px-4">العميل</th>
-                  <th className="py-3 px-4">تكلفة المشوار</th>
-                  <th className="py-3 px-4">المبلغ المدفوع</th>
-                  <th className="py-3 px-4">المتبقي</th>
-                  <th className="py-3 px-4">طريقة الدفع</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredTrips.map(trip => {
-                  const cost = Number(trip.cost) || 0;
-                  const paid = Number(trip.paidAmount) || 0;
-                  const remaining = Math.max(0, cost - paid);
-                  const paymentObj = PAYMENT_METHODS.find(m => m.id === trip.paymentMethod);
+          {/* ترويسة بيانات كشف حساب الموصل المختار — تظهر في الشاشة والطباعة */}
+          {selectedFinancialDriver ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                    {selectedFinancialDriver.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black text-slate-900">
+                        كشف حساب الموصل: {selectedFinancialDriver.name}
+                      </h2>
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                        كشف مالي معتمد
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                      <span>الجوال: <strong className="text-slate-700 font-mono" dir="ltr">{selectedFinancialDriver.phone || '-'}</strong></span>
+                      <span>•</span>
+                      <span>المركبة: <strong className="text-slate-700">{selectedFinancialDriver.vehicleType || 'مركبة نقل'}</strong></span>
+                      <span>•</span>
+                      <span>الشركة: <strong className="text-brand-700">{activeCompany?.name}</strong></span>
+                      <span>•</span>
+                      <span>الفترة: <strong className="text-slate-700">{filters.startDate ? formatArabicDate(filters.startDate) : 'البداية'} إلى {filters.endDate ? formatArabicDate(filters.endDate) : 'اليوم'}</strong></span>
+                    </div>
+                  </div>
+                </div>
 
-                  return (
-                    <tr key={trip.id} className="hover:bg-slate-50">
-                      <td className="py-3 px-4 font-bold text-brand-700">{trip.tripNumber}</td>
-                      <td className="py-3 px-4 text-slate-500">{formatArabicDate(trip.tripDate)}</td>
-                      <td className="py-3 px-4 font-bold text-slate-800">{trip.driverName}</td>
-                      <td className="py-3 px-4 text-slate-900">{trip.customerName}</td>
-                      <td className="py-3 px-4 font-extrabold text-slate-900">{formatCurrency(cost)}</td>
-                      <td className="py-3 px-4 font-bold text-emerald-700">{formatCurrency(paid)}</td>
-                      <td className="py-3 px-4 font-bold text-amber-700">
-                        {remaining > 0 ? formatCurrency(remaining) : <span className="text-slate-400">0</span>}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
-                          {paymentObj ? paymentObj.label : trip.paymentMethod}
-                        </span>
+                <div className="no-print text-left">
+                  <span className="text-[11px] text-slate-400 block">إجمالي الحركات</span>
+                  <span className="text-sm font-black text-slate-800">{financialTotals.totalTrips} مشوار</span>
+                </div>
+              </div>
+
+              {/* بطاقات المؤشرات المالية لكشف الحساب */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print-break-inside-avoid">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70">
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1">إجمالي الحركات/المشاوير</span>
+                  <span className="text-xl font-black text-slate-900">{financialTotals.totalTrips}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70">
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1">إجمالي تكاليف المشاوير</span>
+                  <span className="text-lg font-black text-slate-900">{formatCurrency(financialTotals.totalCost)}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                  <span className="text-[11px] font-bold text-emerald-700 block mb-1">إجمالي المبالغ المسددة</span>
+                  <span className="text-lg font-black text-emerald-800">{formatCurrency(financialTotals.totalPaid)}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-300">
+                  <span className="text-[11px] font-bold text-amber-800 block mb-1">إجمالي المبلغ المستحق (المتبقي)</span>
+                  <span className="text-lg font-black text-amber-900">{formatCurrency(financialTotals.totalRemaining)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* تنبيه عند عدم اختيار موصل محدد */
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-amber-900">عرض جميع الموصلين حالياً</h4>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    اختر موصلاً من القائمة أعلاه أو انقر على أحد الموصلين أدناه لعرض كشف حسابه المستقل وإجمالي مستحقاته للطباعة.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {drivers.slice(0, 5).map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => handleDriverSelect(d.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:border-brand-500 hover:text-brand-600 transition"
+                  >
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* جدول كشف الحساب المالي التفصيلي */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between no-print">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  {selectedFinancialDriver ? `سجل الفواتير والحركات المالية للموصل: ${selectedFinancialDriver.name}` : 'سجل الحركات المالية لجميع الموصلين'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {selectedFinancialDriver ? 'كشف حساب رسمي بمستحقات التوصيل والمبالغ المسددة والمتبقية' : 'إجمالي العمليات المالية للمشاوير'}
+                </p>
+              </div>
+              <span className="text-xs font-bold text-slate-500">
+                عدد البنود: <strong className="text-slate-900">{financialTrips.length}</strong>
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200/80">
+                  <tr>
+                    <th className="py-3 px-3 text-center w-10">#</th>
+                    <th className="py-3 px-3">رقم المشوار</th>
+                    <th className="py-3 px-3">التاريخ</th>
+                    {!selectedFinancialDriver && (
+                      <th className="py-3 px-3">الموصل</th>
+                    )}
+                    <th className="py-3 px-3">العميل</th>
+                    <th className="py-3 px-3">حالة الاستلام</th>
+                    <th className="py-3 px-3">طريقة الدفع</th>
+                    <th className="py-3 px-3">تكلفة المشوار</th>
+                    <th className="py-3 px-3 text-emerald-700">المبلغ المدفوع</th>
+                    <th className="py-3 px-3 text-amber-800">المتبقي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {financialTrips.length === 0 ? (
+                    <tr>
+                      <td colSpan={selectedFinancialDriver ? 9 : 10} className="py-12 text-center">
+                        <EmptyState
+                          title="لا توجد حركات مالية"
+                          description="لم يتم العثور على أي حركات أو فواتير مطابقة للفترة والفلاتر المحددة."
+                        />
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ) : (
+                    financialTrips.map((trip, idx) => {
+                      const cost = Number(trip.cost) || 0;
+                      const paid = Number(trip.paidAmount) || 0;
+                      const remaining = Math.max(0, cost - paid);
+                      const paymentObj = PAYMENT_METHODS.find(m => m.id === trip.paymentMethod);
+
+                      return (
+                        <tr key={trip.id || trip.tripNumber} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-3 text-center font-bold text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-brand-700 whitespace-nowrap">
+                            {trip.tripNumber}
+                          </td>
+                          <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                            {formatArabicDate(trip.tripDate)}
+                          </td>
+                          {!selectedFinancialDriver && (
+                            <td className="py-3 px-3">
+                              <button
+                                type="button"
+                                onClick={() => handleDriverSelect(trip.driverId)}
+                                className="font-bold text-slate-800 hover:text-brand-600 hover:underline text-right"
+                                title="عرض كشف حساب هذا الموصل"
+                              >
+                                {trip.driverName}
+                              </button>
+                            </td>
+                          )}
+                          <td className="py-3 px-3 font-medium text-slate-900">
+                            {trip.customerName}
+                          </td>
+                          <td className="py-3 px-3">
+                            <Badge variant={DELIVERY_STATUS_CONFIG[trip.deliveryStatus]?.colorName || 'gray'} size="sm" dot>
+                              {DELIVERY_STATUS_CONFIG[trip.deliveryStatus]?.label}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md whitespace-nowrap">
+                              {paymentObj ? paymentObj.label : trip.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-extrabold text-slate-900 whitespace-nowrap">
+                            {formatCurrency(cost)}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-emerald-700 whitespace-nowrap">
+                            {formatCurrency(paid)}
+                          </td>
+                          <td className="py-3 px-3 font-black text-amber-800 whitespace-nowrap">
+                            {remaining > 0 ? (
+                              formatCurrency(remaining)
+                            ) : (
+                              <span className="text-slate-400 font-normal">0</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                {/* صف الإجمالي النهائي — يظهر مرة واحدة فقط في نهاية الجدول */}
+                {financialTrips.length > 0 && (
+                  <tfoot className="bg-slate-100/90 text-slate-900 font-black border-t-2 border-slate-300">
+                    <tr>
+                      <td
+                        colSpan={selectedFinancialDriver ? 6 : 7}
+                        className="py-3.5 px-4 text-left font-black text-slate-900 text-xs"
+                      >
+                        {selectedFinancialDriver
+                          ? `إجمالي المبلغ المستحق للموصل (${selectedFinancialDriver.name}):`
+                          : 'إجمالي المبالغ المستحقة لجميع السجلات المعروضة:'}
+                      </td>
+                      <td className="py-3.5 px-3 font-black text-slate-900 whitespace-nowrap">
+                        {formatCurrency(financialTotals.totalCost)}
+                      </td>
+                      <td className="py-3.5 px-3 font-black text-emerald-700 whitespace-nowrap">
+                        {formatCurrency(financialTotals.totalPaid)}
+                      </td>
+                      <td className="py-3.5 px-3 font-black text-amber-900 text-sm whitespace-nowrap bg-amber-100/50">
+                        {formatCurrency(financialTotals.totalRemaining)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </div>
+
+          {/* بطاقة الملخص المحاسبي والاعتمادات الرسمية في نهاية الكشف — تظهر مرة واحدة في نهاية التقرير */}
+          {financialTrips.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-5 print-break-inside-avoid">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">الملخص المالي والاعتماد المحاسبي</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    بيان استحقاق مالي رسمي معتمد صادر عن نظام المجد لإدارة التوصيل
+                  </p>
+                </div>
+                <div className="text-left bg-amber-50 border border-amber-300/80 px-4 py-2.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-amber-800 block">صافي المبلغ المستحق للموصل:</span>
+                  <span className="text-xl font-black text-amber-950 font-mono">
+                    {formatCurrency(financialTotals.totalRemaining)}
+                  </span>
+                </div>
+              </div>
+
+              {/* قسم التوقيعات والاعتماد الرسمي للطباعة والاستخدام المحاسبي */}
+              <div className="pt-2">
+                <div className="grid grid-cols-3 gap-6 text-center text-xs">
+                  <div className="space-y-8">
+                    <p className="font-bold text-slate-700">إعداد وتدقيق المحاسب</p>
+                    <div className="border-b border-dashed border-slate-400 mx-auto w-3/4"></div>
+                    <p className="text-[11px] text-slate-400 font-mono">التوقيع والتاريخ</p>
+                  </div>
+
+                  <div className="space-y-8">
+                    <p className="font-bold text-slate-700">توقيع الموصل بالاستلام والمصادقة</p>
+                    <div className="border-b border-dashed border-slate-400 mx-auto w-3/4"></div>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      {selectedFinancialDriver ? selectedFinancialDriver.name : 'الموصل'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-8">
+                    <p className="font-bold text-slate-700">اعتماد وختم إدارة الشركة</p>
+                    <div className="border-b border-dashed border-slate-400 mx-auto w-3/4"></div>
+                    <p className="text-[11px] text-slate-400 font-mono">{activeCompany?.name}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-3 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
+                  <span>تم استخراج هذا التقرير آلياً، ويعتمد كمستند مالي رسمي لمستحقات الموصل.</span>
+                  <span>نظام المجد لإدارة التوصيل © 2026</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
