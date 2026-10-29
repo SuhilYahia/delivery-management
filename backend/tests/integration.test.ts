@@ -42,8 +42,20 @@ describe('اختبارات التكامل لنظام المجد لإدارة ا�
     company1Id = c1!.id;
     company2Id = c2!.id;
 
-    const driversC1 = await prisma.driver.findMany({ where: { companyId: company1Id } });
-    const driversC2 = await prisma.driver.findMany({ where: { companyId: company2Id } });
+    let driversC1 = await prisma.driver.findMany({ where: { companyId: company1Id, isDeleted: false } });
+    if (driversC1.length === 0) {
+      const d1 = await prisma.driver.create({
+        data: { companyId: company1Id, name: 'موصل المجد للاختبار', phone: '0910001122', vehicleType: 'VAN' },
+      });
+      driversC1 = [d1];
+    }
+    let driversC2 = await prisma.driver.findMany({ where: { companyId: company2Id, isDeleted: false } });
+    if (driversC2.length === 0) {
+      const d2 = await prisma.driver.create({
+        data: { companyId: company2Id, name: 'موصل أفق للاختبار', phone: '0910003344', vehicleType: 'SEDAN' },
+      });
+      driversC2 = [d2];
+    }
     driver1Id = driversC1[0].id;
     driver2Id = driversC2[0].id;
   });

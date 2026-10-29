@@ -138,3 +138,37 @@ export const PENDING_REASONS = [
   'العميل طلب التأجيل',
   'سبب آخر',
 ];
+
+/**
+ * تفاصيل حالة محاسبة الموصل (Driver Settlement Status)
+ */
+export const DRIVER_SETTLEMENT_CONFIG = {
+  UNSETTLED: {
+    id: 'UNSETTLED',
+    label: 'غير محاسب',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    dotClass: 'bg-amber-500',
+    colorName: 'orange',
+  },
+  SETTLED: {
+    id: 'SETTLED',
+    label: 'محاسب',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    dotClass: 'bg-emerald-500',
+    colorName: 'green',
+  },
+  unsettled: {
+    id: 'UNSETTLED',
+    label: 'غير محاسب',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    dotClass: 'bg-amber-500',
+    colorName: 'orange',
+  },
+  settled: {
+    id: 'SETTLED',
+    label: 'محاسب',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    dotClass: 'bg-emerald-500',
+    colorName: 'green',
+  },
+};

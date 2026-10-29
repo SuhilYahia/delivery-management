@@ -42,6 +42,11 @@ enum PaymentMethod {
   OTHER
 }
 
+enum DriverSettlementStatus {
+  UNSETTLED // غير محاسب (الافتراضي)
+  SETTLED   // محاسب
+}
+
 // ==================== النماذج (Models) ====================
 
 model Company {
@@ -66,6 +71,7 @@ model Company {
   payments     Payment[]
   pricingRules PricingRule[]
   auditLogs    AuditLog[]
+  settlements  DriverSettlement[]
 
   @@map("companies")
 }
@@ -80,9 +86,10 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  memberships      CompanyMembership[]
-  paymentsRecorded Payment[]           @relation("PaymentRecordedBy")
-  auditLogs        AuditLog[]
+  memberships        CompanyMembership[]
+  paymentsRecorded   Payment[]           @relation("PaymentRecordedBy")
+  settlementsCreated DriverSettlement[]  @relation("SettlementCreatedBy")
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -117,44 +124,77 @@ model Driver {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  trips   Trip[]
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trips       Trip[]
+  settlements DriverSettlement[]
 
   @@index([companyId])
   @@map("drivers")
 }
 
 model Trip {
-  id                     String     @id @default(uuid())
-  tripNumber             String     // رقم المشوار مثل TRP-1001
+  id                     String                 @id @default(uuid())
+  tripNumber             String                 // رقم المشوار مثل TRP-1001
   companyId              String
   driverId               String
   orderNumber            String?
   customerName           String
   customerPhone          String?
   deliveryAddress        String?
-  tripDate               DateTime   @db.Date
-  tripTime               String     // صيغة 24 ساعة "14:30"
+  tripDate               DateTime               @db.Date
+  tripTime               String                 // صيغة 24 ساعة "14:30"
   durationMinutes        Int
-  cost                   Decimal    @db.Decimal(10, 2)
-  appliedPricingSnapshot Json       // نسخة من قواعد التسعير المطبقة وقت الإنشاء
-  status                 TripStatus @default(NEW)
+  cost                   Decimal                @db.Decimal(10, 2)
+  appliedPricingSnapshot Json                   // نسخة من قواعد التسعير المطبقة وقت الإنشاء
+  status                 TripStatus             @default(NEW)
+  driverSettlementStatus DriverSettlementStatus @default(UNSETTLED) // حالة محاسبة الموصل
+  settledAt              DateTime?                                  // تاريخ المحاسبة
+  settlementAmount       Decimal?               @db.Decimal(10, 2)  // المبلغ المحاسب عليه
+  settlementId           String?
   cancelReason           String?
   notes                  String?
   adminNotes             String?
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  driver   Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  delivery Delivery?
-  payments Payment[]
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  driver     Driver            @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  settlement DriverSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  delivery   Delivery?
+  payments   Payment[]
 
   @@index([companyId])
   @@index([driverId])
   @@index([tripDate])
   @@index([status])
+  @@index([driverSettlementStatus])
   @@map("trips")
+}
+
+model DriverSettlement {
+  id               String        @id @default(uuid())
+  settlementNumber String        // رقم التسوية مثل STL-1001
+  companyId        String
+  driverId         String
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  tripCount        Int           @default(0)
+  settledAt        DateTime      @default(now())
+  paymentMethod    PaymentMethod @default(CASH)
+  reference        String?
+  notes            String?
+  createdById      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  createdBy User?     @relation("SettlementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  trips     Trip[]
+
+  @@index([companyId])
+  @@index([driverId])
+  @@index([settledAt])
+  @@map("driver_settlements")
 }
 
 model Delivery {

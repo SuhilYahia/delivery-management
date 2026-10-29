@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Plus,
   Minus,
+  ReceiptText,
 } from 'lucide-react';
 
 export default function TripFormModal({
@@ -52,6 +53,7 @@ export default function TripFormModal({
     returnReason: '',
     paymentMethod: 'cash',
     paidAmount: 50,
+    driverSettlementStatus: 'UNSETTLED',
     notes: '',
     adminNotes: '',
   });
@@ -66,6 +68,7 @@ export default function TripFormModal({
         ...initialData,
         durationMinutes: initialData.durationMinutes || 30,
         paidAmount: initialData.paidAmount !== undefined ? initialData.paidAmount : initialData.cost,
+        driverSettlementStatus: initialData.driverSettlementStatus ? initialData.driverSettlementStatus.toUpperCase() : 'UNSETTLED',
       });
     } else {
       const activeDrivers = drivers.filter(d => d.isActive);
@@ -96,6 +99,7 @@ export default function TripFormModal({
         returnReason: '',
         paymentMethod: 'cash',
         paidAmount: initialCost,
+        driverSettlementStatus: 'UNSETTLED',
         notes: '',
         adminNotes: '',
       });
@@ -548,7 +552,68 @@ export default function TripFormModal({
           </div>
         </div>
 
-        {/* ================= القسم الخامس: الملاحظات ================= */}
+        {/* ================= القسم الخامس: محاسبة الموصل ================= */}
+        <div className="rounded-xl border border-slate-200/80 p-4 bg-slate-50/50 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+              <ReceiptText className="w-4 h-4 text-emerald-600" />
+              <span>حالة محاسبة الموصل</span>
+            </div>
+            <span className="text-[11px] text-slate-500 font-normal">
+              منفصلة عن حالة تحصيل العميل والتسليم
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                formData.driverSettlementStatus === 'UNSETTLED'
+                  ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30 text-amber-950 font-bold'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="driverSettlementStatus"
+                value="UNSETTLED"
+                checked={formData.driverSettlementStatus === 'UNSETTLED'}
+                onChange={(e) => setFormData({ ...formData, driverSettlementStatus: e.target.value })}
+                className="mt-0.5 w-4 h-4 text-amber-600 focus:ring-amber-500"
+              />
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold text-slate-900">غير محاسب (القيمة الافتراضية)</div>
+                <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                  يُحسب المشوار كمستحق مالي للموصل لتتم تسويته لاحقاً عبر كشف الحساب
+                </div>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                formData.driverSettlementStatus === 'SETTLED'
+                  ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-400/30 text-emerald-950 font-bold'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="driverSettlementStatus"
+                value="SETTLED"
+                checked={formData.driverSettlementStatus === 'SETTLED'}
+                onChange={(e) => setFormData({ ...formData, driverSettlementStatus: e.target.value })}
+                className="mt-0.5 w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold text-emerald-800">محاسب (تمت التسوية)</div>
+                <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                  يتم تسجيل المشوار كمسدد للموصل بتكلفة ({formData.cost || 0} ر.س) وتاريخ اليوم
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* ================= القسم السادس: الملاحظات ================= */}
         <div className="rounded-xl border border-slate-200/80 p-4 bg-slate-50/50 space-y-4">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-200/60 pb-2">
             <FileText className="w-4 h-4 text-brand-600" />

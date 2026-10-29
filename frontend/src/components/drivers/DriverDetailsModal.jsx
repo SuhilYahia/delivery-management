@@ -15,12 +15,14 @@ import {
   DollarSign,
   BarChart3,
   ExternalLink,
+  ReceiptText,
 } from 'lucide-react';
 
 export default function DriverDetailsModal({
   isOpen,
   onClose,
   driver,
+  onOpenStatement,
 }) {
   const { activeCompany } = useCompany();
   const { trips } = useApp();
@@ -148,10 +150,22 @@ export default function DriverDetailsModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+        <div className="flex justify-between items-center gap-3 pt-3 border-t border-slate-200">
+          {onOpenStatement && (
+            <button
+              onClick={() => {
+                onClose();
+                onOpenStatement(driver);
+              }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition shadow-xs"
+            >
+              <ReceiptText className="w-4 h-4" />
+              <span>كشف حساب الموصل ومحاسبة المشاوير</span>
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="px-5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+            className="px-5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition mr-auto"
           >
             إغلاق
           </button>

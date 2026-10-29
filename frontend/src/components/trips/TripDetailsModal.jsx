@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  ReceiptText,
 } from 'lucide-react';
 
 export default function TripDetailsModal({
@@ -71,6 +72,14 @@ export default function TripDetailsModal({
             <Badge variant={deliveryStatus.colorName} dot>
               {deliveryStatus.label}
             </Badge>
+            <span className="text-xs text-slate-500 mr-2">محاسبة الموصل:</span>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border ${
+              (trip.driverSettlementStatus || '').toUpperCase() === 'SETTLED'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-800 border-amber-200'
+            }`}>
+              {(trip.driverSettlementStatus || '').toUpperCase() === 'SETTLED' ? 'محاسب' : 'غير محاسب'}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -257,6 +266,44 @@ export default function TripDetailsModal({
             <div className={`p-3 rounded-xl ${remaining > 0 ? 'bg-amber-50 text-amber-800' : 'bg-slate-50 text-slate-700'}`}>
               <span className="text-[11px] block mb-1">{remaining > 0 ? 'المتبقي للتحصيل' : 'حالة الحساب'}</span>
               <span className="text-sm font-extrabold">{remaining > 0 ? formatCurrency(remaining) : 'مسدد بالكامل'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* كرت محاسبة الموصل وتسوية المشوار */}
+        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
+              <ReceiptText className="w-4 h-4 text-emerald-600" />
+              <span>محاسبة الموصل وتصفية الأجر</span>
+            </div>
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+              (trip.driverSettlementStatus || '').toUpperCase() === 'SETTLED'
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}>
+              {(trip.driverSettlementStatus || '').toUpperCase() === 'SETTLED' ? 'تمت المحاسبة' : 'غير محاسب (مستحق للموصل)'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+              <span className="text-slate-500 block mb-0.5 text-[11px]">أجر المشوار للموصل:</span>
+              <span className="font-extrabold text-slate-900">{formatCurrency(trip.cost)}</span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+              <span className="text-slate-500 block mb-0.5 text-[11px]">تاريخ المحاسبة / التسوية:</span>
+              <span className="font-bold text-slate-800">
+                {trip.settledAt ? formatArabicDate(trip.settledAt) : 'لم تتم التسوية بعد'}
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+              <span className="text-slate-500 block mb-0.5 text-[11px]">رقم سند التسوية:</span>
+              <span className="font-mono font-bold text-slate-800">
+                {trip.settlementNumber || trip.settlement?.settlementNumber || '-'}
+              </span>
             </div>
           </div>
         </div>

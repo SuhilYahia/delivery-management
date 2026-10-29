@@ -38,6 +38,10 @@ export async function getTrips(req: Request, res: Response, next: NextFunction):
       };
     }
 
+    if (query.driverSettlementStatus) {
+      where.driverSettlementStatus = query.driverSettlementStatus;
+    }
+
     if (query.startDate || query.endDate) {
       where.tripDate = {};
       if (query.startDate) {
@@ -56,6 +60,7 @@ export async function getTrips(req: Request, res: Response, next: NextFunction):
         driver: { select: { id: true, name: true, phone: true } },
         delivery: true,
         payments: true,
+        settlement: { select: { id: true, settlementNumber: true, settledAt: true } },
       },
       orderBy: { [query.sortField]: query.sortOrder },
       skip: (query.page - 1) * query.limit,
@@ -98,6 +103,13 @@ export async function getTrips(req: Request, res: Response, next: NextFunction):
         adminNotes: t.adminNotes,
         createdAt: t.createdAt,
 
+        // بيانات محاسبة الموصل
+        driverSettlementStatus: t.driverSettlementStatus,
+        settledAt: t.settledAt ? t.settledAt.toISOString().slice(0, 10) : null,
+        settlementAmount: t.settlementAmount ? Number(t.settlementAmount) : null,
+        settlementId: t.settlementId,
+        settlementNumber: t.settlement?.settlementNumber || null,
+
         // بيانات التوصيل
         deliveryStatus: t.delivery?.status.toLowerCase() || 'pending',
         actualDeliveryDate: t.delivery?.actualDeliveryDate ? t.delivery.actualDeliveryDate.toISOString().slice(0, 10) : '',
@@ -110,7 +122,7 @@ export async function getTrips(req: Request, res: Response, next: NextFunction):
         returnReason: t.delivery?.returnReason || '',
         deliveryNotes: t.delivery?.deliveryNotes || '',
 
-        // البيانات المالية
+        // البيانات المالية للطلب
         paidAmount: totalPaid,
         remainingAmount,
         paymentStatus,
@@ -135,6 +147,7 @@ export async function getTripById(req: Request, res: Response, next: NextFunctio
       include: {
         driver: true,
         delivery: true,
+        settlement: true,
         payments: {
           include: { recordedBy: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'desc' },
@@ -156,6 +169,8 @@ export async function getTripById(req: Request, res: Response, next: NextFunctio
       cost,
       totalPaid,
       remainingAmount,
+      settlementAmount: trip.settlementAmount ? Number(trip.settlementAmount) : null,
+      settledAt: trip.settledAt ? trip.settledAt.toISOString().slice(0, 10) : null,
       tripDate: trip.tripDate.toISOString().slice(0, 10),
     });
   } catch (err) {
@@ -195,6 +210,8 @@ export async function createTrip(req: Request, res: Response, next: NextFunction
     const tripCount = await prisma.trip.count({ where: { companyId } });
     const tripNumber = `TRP-${tripCount + 1001}`;
 
+    const isSettled = data.driverSettlementStatus === 'SETTLED';
+
     const newTrip = await prisma.$transaction(async (tx) => {
       const trip = await tx.trip.create({
         data: {
@@ -211,6 +228,9 @@ export async function createTrip(req: Request, res: Response, next: NextFunction
           cost: new Prisma.Decimal(cost),
           appliedPricingSnapshot: pricingRule ? JSON.parse(JSON.stringify(pricingRule)) : {},
           status: data.status,
+          driverSettlementStatus: isSettled ? 'SETTLED' : 'UNSETTLED',
+          settledAt: isSettled ? new Date(data.tripDate) : null,
+          settlementAmount: isSettled ? new Prisma.Decimal(cost) : null,
           notes: data.notes || null,
           adminNotes: data.adminNotes || null,
           delivery: {
@@ -250,7 +270,7 @@ export async function createTrip(req: Request, res: Response, next: NextFunction
       action: 'CREATE_TRIP',
       entity: 'Trip',
       entityId: newTrip.id,
-      details: { tripNumber, cost, customer: data.customerName },
+      details: { tripNumber, cost, customer: data.customerName, driverSettlementStatus: newTrip.driverSettlementStatus },
     });
 
     successResponse(res, newTrip, 'تم تسجيل المشوار بنجاح', 201);
@@ -284,11 +304,29 @@ export async function updateTrip(req: Request, res: Response, next: NextFunction
       newCost = new Prisma.Decimal(calculateTripCost(data.durationMinutes, pricingRule || undefined));
     }
 
+    let settledAtUpdate = undefined;
+    let settlementAmountUpdate = undefined;
+    let settlementIdUpdate = undefined;
+
+    if (data.driverSettlementStatus !== undefined) {
+      if (data.driverSettlementStatus === 'SETTLED' && trip.driverSettlementStatus !== 'SETTLED') {
+        settledAtUpdate = new Date();
+        settlementAmountUpdate = newCost;
+      } else if (data.driverSettlementStatus === 'UNSETTLED' && trip.driverSettlementStatus !== 'UNSETTLED') {
+        settledAtUpdate = null;
+        settlementAmountUpdate = null;
+        settlementIdUpdate = null;
+      }
+    }
+
     const updated = await prisma.trip.update({
       where: { id: tripId },
       data: {
         ...data,
         cost: newCost,
+        settledAt: settledAtUpdate,
+        settlementAmount: settlementAmountUpdate,
+        settlementId: settlementIdUpdate,
         tripDate: data.tripDate ? new Date(data.tripDate) : undefined,
       },
       include: {

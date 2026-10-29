@@ -8,6 +8,7 @@ import StatCard from '../components/common/StatCard';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
 import TripDetailsModal from '../components/trips/TripDetailsModal';
+import DriverStatementModal from '../components/drivers/DriverStatementModal';
 import {
   calculateTripSummaryStats,
   aggregateTripsByDay,
@@ -44,6 +45,8 @@ import {
   Clock,
   Printer,
   Download,
+  Wallet,
+  ReceiptText,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -84,6 +87,7 @@ export default function Reports() {
   const [sortField, setSortField] = useState('totalTrips');
   const [sortOrder, setSortOrder] = useState('desc');
   const [viewingTrip, setViewingTrip] = useState(null);
+  const [statementDriver, setStatementDriver] = useState(null);
   const [includeCancelledInFinance, setIncludeCancelledInFinance] = useState(false);
 
   // تحديث الـ Tab
@@ -145,6 +149,48 @@ export default function Reports() {
     });
   }, [filteredTrips, drivers, sortField, sortOrder]);
 
+  // حساب تقرير مستحقات الموصلين
+  const driverDuesData = useMemo(() => {
+    const targetDrivers = filters.driverId ? drivers.filter(d => d.id === filters.driverId) : drivers;
+    const list = targetDrivers.map(d => {
+      const driverTrips = filteredTrips.filter(t => t.driverId === d.id);
+      const totalTrips = driverTrips.length;
+      const totalCost = driverTrips.reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
+      const settledTrips = driverTrips.filter(t => (t.driverSettlementStatus || '').toUpperCase() === 'SETTLED');
+      const settledAmount = settledTrips.reduce((sum, t) => sum + (t.settlementAmount ? Number(t.settlementAmount) : (Number(t.cost) || 0)), 0);
+      const unsettledTrips = driverTrips.filter(t => (t.driverSettlementStatus || '').toUpperCase() !== 'SETTLED');
+      const unsettledAmount = unsettledTrips.reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
+      const settlementPercentage = totalCost > 0 ? Math.round((settledAmount / totalCost) * 100) : 100;
+
+      return {
+        rawDriver: d,
+        driverId: d.id,
+        driverName: d.name,
+        driverPhone: d.phone,
+        vehicleType: d.vehicleType,
+        totalTrips,
+        totalCost,
+        settledAmount,
+        unsettledAmount,
+        settledCount: settledTrips.length,
+        unsettledCount: unsettledTrips.length,
+        settlementPercentage,
+      };
+    });
+
+    const summary = list.reduce(
+      (acc, item) => ({
+        totalTrips: acc.totalTrips + item.totalTrips,
+        totalCost: acc.totalCost + item.totalCost,
+        totalSettled: acc.totalSettled + item.settledAmount,
+        totalRemaining: acc.totalRemaining + item.unsettledAmount,
+      }),
+      { totalTrips: 0, totalCost: 0, totalSettled: 0, totalRemaining: 0 }
+    );
+
+    return { list, summary };
+  }, [drivers, filteredTrips, filters.driverId]);
+
   // بيانات الرسوم البيانية للتقرير
   const dailyChartData = useMemo(() => aggregateTripsByDay(filteredTrips), [filteredTrips]);
   const statusPieData = useMemo(() => getDeliveryStatusDistribution(filteredTrips), [filteredTrips]);
@@ -166,11 +212,28 @@ export default function Reports() {
       tripStatus: '',
       deliveryStatus: '',
     });
-    setTab('all_drivers', { driverId: '' });
+    setTab('driver_dues', { driverId: '' });
   };
 
   // تصدير CSV حسب التقرير الحالي
   const handleExportCSV = () => {
+    if (currentTab === 'driver_dues') {
+      const cols = [
+        { key: 'driverName', label: 'اسم الموصل' },
+        { key: 'driverPhone', label: 'رقم الجوال' },
+        { key: 'vehicleType', label: 'نوع المركبة' },
+        { key: 'totalTrips', label: 'إجمالي المشاوير' },
+        { key: 'totalCost', label: 'إجمالي التكاليف (ر.س)' },
+        { key: 'settledAmount', label: 'المبالغ المسددة (ر.س)' },
+        { key: 'unsettledAmount', label: 'المستحقات المتبقية (ر.س)' },
+        { key: 'settledCount', label: 'المشاوير المحاسبة' },
+        { key: 'unsettledCount', label: 'المشاوير غير المحاسبة' },
+        { key: 'settlementPercentage', label: 'نسبة التسوية', formatter: (v) => `${v}%` },
+      ];
+      exportToCSV(driverDuesData.list, cols, `تقرير-مستحقات-الموصلين-${activeCompany?.name}`);
+      return;
+    }
+
     if (currentTab === 'all_drivers') {
       const cols = [
         { key: 'driverName', label: 'اسم الموصل' },
@@ -207,6 +270,7 @@ export default function Reports() {
       {/* ترويسة خاصة بالطباعة الورقية فقط */}
       <PrintHeader
         reportTitle={
+          currentTab === 'driver_dues' ? 'تقرير مستحقات الموصلين والتسويات' :
           currentTab === 'all_drivers' ? 'تقرير أداء جميع الموصلين' :
           currentTab === 'driver' ? `تقرير أداء الموصل: ${selectedDriver?.name || ''}` :
           currentTab === 'delivery_status' ? 'تقرير حالة استلام الطلبات والتسليم' :
@@ -222,7 +286,7 @@ export default function Reports() {
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">مركز التقارير والتحليلات</h1>
           <p className="text-xs text-slate-500 mt-1">
-            استخراج تقارير الأداء التشغيلي والمالي ومقارنة الموصلين لشركة{' '}
+            استخراج تقارير الأداء التشغيلي والمالي ومقارنة الموصلين ومتابعة المستحقات لشركة{' '}
             <span className="font-bold text-brand-700">{activeCompany?.name}</span>
           </p>
         </div>
@@ -231,6 +295,7 @@ export default function Reports() {
       {/* ================= ألسنة تبويب أنواع التقارير (Tabs) ================= */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200 no-print">
         {[
+          { id: 'driver_dues', label: 'مستحقات الموصلين والتسوية', icon: Wallet },
           { id: 'all_drivers', label: 'مقارنة جميع الموصلين', icon: Users },
           { id: 'driver', label: 'تقرير موصل محدد', icon: BarChart3 },
           { id: 'date_summary', label: 'التقرير الدوري بالتواريخ', icon: Calendar },
@@ -306,6 +371,159 @@ export default function Reports() {
       </div>
 
       {/* ================= محتوى التبويب المختار ================= */}
+
+      {/* 0. تقرير مستحقات الموصلين والتسويات المالية */}
+      {currentTab === 'driver_dues' && (
+        <div className="space-y-6">
+          {/* كروت الملخص المالي لمستحقات الموصلين */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs mb-1 font-bold">
+                <span>إجمالي المشاوير</span>
+                <Clock className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">
+                {driverDuesData.summary.totalTrips}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">مشوار مسجل في هذه الفترة</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs mb-1 font-bold">
+                <span>إجمالي تكاليف المشاوير</span>
+                <DollarSign className="w-4 h-4 text-brand-600" />
+              </div>
+              <div className="text-2xl font-black text-slate-900">
+                {formatCurrency(driverDuesData.summary.totalCost)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">القيمة الإجمالية لأجور الموصلين</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 shadow-2xs">
+              <div className="flex items-center justify-between text-emerald-700 text-xs mb-1 font-bold">
+                <span>إجمالي المبالغ المسددة</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black text-emerald-800">
+                {formatCurrency(driverDuesData.summary.totalSettled)}
+              </div>
+              <div className="text-[11px] text-emerald-700 mt-1 font-medium">مشاوير تمت محاسبتها</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-300 shadow-2xs">
+              <div className="flex items-center justify-between text-amber-800 text-xs mb-1 font-bold">
+                <span>المستحقات المتبقية (غير المسددة)</span>
+                <Wallet className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="text-2xl font-black text-amber-900">
+                {formatCurrency(driverDuesData.summary.totalRemaining)}
+              </div>
+              <div className="text-[11px] text-amber-800 mt-1 font-bold">مستحقات بانتظار التسوية</div>
+            </div>
+          </div>
+
+          {/* جدول مستحقات الموصلين التفصيلي */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">كشف مستحقات وتسويات أسطول التوصيل</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  مقارنة المبالغ المحاسب عليها والمستحقات المتبقية لكل موصل مع إمكانية فتح كشف الحساب الفردي والتسوية
+                </p>
+              </div>
+              <div className="text-xs text-slate-500 font-bold">
+                عدد الموصلين: <span className="text-slate-800">{driverDuesData.list.length}</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200/80">
+                  <tr>
+                    <th className="py-3.5 px-4">اسم الموصل</th>
+                    <th className="py-3.5 px-4">رقم الجوال</th>
+                    <th className="py-3.5 px-4 text-center">إجمالي المشاوير</th>
+                    <th className="py-3.5 px-4">إجمالي التكاليف</th>
+                    <th className="py-3.5 px-4 text-emerald-700">المبالغ المسددة</th>
+                    <th className="py-3.5 px-4 text-amber-800">المستحقات المتبقية</th>
+                    <th className="py-3.5 px-4 text-center">نسبة التسوية</th>
+                    <th className="py-3.5 px-4 text-center no-print">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {driverDuesData.list.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="py-12">
+                        <EmptyState
+                          title="لا توجد بيانات موصلين"
+                          description="لم يتم العثور على أي موصلين مطابقين للفلاتر المحددة."
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    driverDuesData.list.map((row) => (
+                      <tr key={row.driverId} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-extrabold text-slate-900 text-sm">{row.driverName}</div>
+                          <div className="text-[10px] text-slate-400">{row.vehicleType || 'مركبة نقل'}</div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-700 font-mono" dir="ltr">
+                          {row.driverPhone || '-'}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                          <div>{row.totalTrips}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">
+                            ({row.settledCount} محاسب / {row.unsettledCount} متبقي)
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-black text-slate-900">
+                          {formatCurrency(row.totalCost)}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-black text-emerald-700">
+                          {formatCurrency(row.settledAmount)}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-black text-amber-800">
+                          {formatCurrency(row.unsettledAmount)}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-16 bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded-full transition-all"
+                                style={{ width: `${Math.min(100, row.settlementPercentage)}%` }}
+                              />
+                            </div>
+                            <span className="font-bold text-[11px] text-slate-700">
+                              {row.settlementPercentage}%
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center no-print">
+                          <button
+                            onClick={() => setStatementDriver(row.rawDriver)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition shadow-2xs"
+                            title="فتح كشف حساب الموصل وتسجيل التسوية"
+                          >
+                            <ReceiptText className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>كشف الحساب والتسوية</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. تقرير أداء جميع الموصلين ومقارنتهم */}
       {currentTab === 'all_drivers' && (
@@ -726,6 +944,15 @@ export default function Reports() {
           isOpen={!!viewingTrip}
           onClose={() => setViewingTrip(null)}
           trip={viewingTrip}
+        />
+      )}
+
+      {/* مودال كشف حساب الموصل ومحاسبة المشاوير */}
+      {statementDriver && (
+        <DriverStatementModal
+          isOpen={!!statementDriver}
+          onClose={() => setStatementDriver(null)}
+          driver={statementDriver}
         />
       )}
     </div>

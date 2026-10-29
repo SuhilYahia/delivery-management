@@ -418,6 +418,39 @@ export const api = {
     return request(`/reports/data?${query.toString()}`);
   },
 
+  // ==================== محاسبة الموصلين (Driver Settlements) ====================
+  async settleDriverTrips(data) {
+    await ensureAuthenticated();
+    return request('/settlements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getDriverStatement(driverId, filters = {}) {
+    await ensureAuthenticated();
+    const query = new URLSearchParams();
+    if (filters.startDate) query.set('startDate', filters.startDate);
+    if (filters.endDate) query.set('endDate', filters.endDate);
+    if (filters.status) query.set('status', filters.status);
+    return request(`/settlements/driver/${driverId}/statement?${query.toString()}`);
+  },
+
+  async getSettlementHistory(driverId = '') {
+    await ensureAuthenticated();
+    const query = driverId ? `?driverId=${driverId}` : '';
+    return request(`/settlements/history${query}`);
+  },
+
+  async getDriverDuesReport(filters = {}) {
+    await ensureAuthenticated();
+    const query = new URLSearchParams();
+    if (filters.driverId) query.set('driverId', filters.driverId);
+    if (filters.startDate) query.set('startDate', filters.startDate);
+    if (filters.endDate) query.set('endDate', filters.endDate);
+    return request(`/settlements/dues-report?${query.toString()}`);
+  },
+
   // ==================== المساعد الذكي (AI) ====================
   async chatWithAi(prompt, history = []) {
     await ensureAuthenticated();

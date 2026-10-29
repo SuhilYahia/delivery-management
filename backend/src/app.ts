@@ -17,6 +17,7 @@ import deliveryRoutes from './modules/deliveries/deliveries.routes.js';
 import paymentRoutes from './modules/payments/payments.routes.js';
 import pricingRoutes from './modules/pricing/pricing.routes.js';
 import reportRoutes from './modules/reports/reports.routes.js';
+import settlementRoutes from './modules/settlements/settlements.routes.js';
 import aiRoutes from './ai/ai.routes.js';
 
 export const app = express();
@@ -88,6 +89,7 @@ apiRouter.use('/deliveries', deliveryRoutes);
 apiRouter.use('/payments', paymentRoutes);
 apiRouter.use('/pricing', pricingRoutes);
 apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/settlements', settlementRoutes);
 apiRouter.use('/ai', aiRoutes);
 
 app.use('/api/v1', apiRouter);

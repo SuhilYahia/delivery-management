@@ -4,6 +4,7 @@ import { useCompany } from '../context/CompanyContext';
 import { useApp } from '../context/AppContext';
 import DriverFormModal from '../components/drivers/DriverFormModal';
 import DriverDetailsModal from '../components/drivers/DriverDetailsModal';
+import DriverStatementModal from '../components/drivers/DriverStatementModal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import Badge from '../components/common/Badge';
 import EmptyState from '../components/common/EmptyState';
@@ -22,6 +23,7 @@ import {
   XCircle,
   BarChart3,
   Power,
+  ReceiptText,
 } from 'lucide-react';
 
 export default function Drivers() {
@@ -33,6 +35,7 @@ export default function Drivers() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState(null);
   const [viewingDriver, setViewingDriver] = useState(null);
+  const [statementDriver, setStatementDriver] = useState(null);
   const [deletingDriverId, setDeletingDriverId] = useState(null);
 
   // حساب إحصائيات الموصلين الفعلية المستخلصة من المشاوير
@@ -166,6 +169,13 @@ export default function Drivers() {
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
+                            onClick={() => setStatementDriver(rawDriver)}
+                            className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition"
+                            title="كشف حساب الموصل ومحاسبة المشاوير"
+                          >
+                            <ReceiptText className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => navigate(`/reports?tab=driver&driverId=${d.driverId}`)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
                             title="تقرير أداء الموصل"
@@ -229,6 +239,16 @@ export default function Drivers() {
           isOpen={!!viewingDriver}
           onClose={() => setViewingDriver(null)}
           driver={viewingDriver}
+          onOpenStatement={setStatementDriver}
+        />
+      )}
+
+      {/* مودال كشف حساب الموصل ومحاسبة المشاوير */}
+      {statementDriver && (
+        <DriverStatementModal
+          isOpen={!!statementDriver}
+          onClose={() => setStatementDriver(null)}
+          driver={statementDriver}
         />
       )}
 

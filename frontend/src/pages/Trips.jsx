@@ -40,6 +40,7 @@ export default function Trips() {
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedTripStatus, setSelectedTripStatus] = useState('');
   const [selectedDeliveryStatus, setSelectedDeliveryStatus] = useState('');
+  const [selectedSettlementStatus, setSelectedSettlementStatus] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -89,12 +90,20 @@ export default function Trips() {
         return false;
       }
 
-      // 5. فلتر طريقة الدفع
+      // 5. فلتر حالة محاسبة الموصل
+      if (selectedSettlementStatus) {
+        const statusUpper = (trip.driverSettlementStatus || 'UNSETTLED').toUpperCase();
+        if (statusUpper !== selectedSettlementStatus) {
+          return false;
+        }
+      }
+
+      // 6. فلتر طريقة الدفع
       if (selectedPaymentMethod && trip.paymentMethod !== selectedPaymentMethod) {
         return false;
       }
 
-      // 6. فلتر التاريخ
+      // 7. فلتر التاريخ
       if (startDate || endDate) {
         if (!isDateInRange(trip.tripDate, startDate, endDate)) {
           return false;
@@ -138,6 +147,7 @@ export default function Trips() {
     setSelectedDriverId('');
     setSelectedTripStatus('');
     setSelectedDeliveryStatus('');
+    setSelectedSettlementStatus('');
     setSelectedPaymentMethod('');
     setStartDate('');
     setEndDate('');
@@ -156,6 +166,8 @@ export default function Trips() {
       { key: 'tripTime', label: 'وقت المشوار' },
       { key: 'durationMinutes', label: 'المدة بالدقائق' },
       { key: 'cost', label: 'تكلفة المشوار (ر.س)' },
+      { key: 'driverSettlementStatus', label: 'حالة محاسبة الموصل', formatter: (val) => (val || '').toUpperCase() === 'SETTLED' ? 'محاسب' : 'غير محاسب' },
+      { key: 'settledAt', label: 'تاريخ المحاسبة', formatter: (val) => val ? formatArabicDate(val) : '-' },
       { key: 'status', label: 'حالة المشوار', formatter: (val) => TRIP_STATUS_CONFIG[val]?.label || val },
       { key: 'deliveryStatus', label: 'حالة الاستلام', formatter: (val) => DELIVERY_STATUS_CONFIG[val]?.label || val },
       { key: 'actualDeliveryDate', label: 'تاريخ التسليم الفعلي' },
@@ -265,6 +277,17 @@ export default function Trips() {
             <option value="returned">تم إرجاع الطلب</option>
           </select>
 
+          {/* حالة محاسبة الموصل */}
+          <select
+            value={selectedSettlementStatus}
+            onChange={(e) => { setSelectedSettlementStatus(e.target.value); setCurrentPage(1); }}
+            className="rounded-xl border border-slate-200 px-2.5 py-2 bg-slate-50 focus:bg-white focus:outline-none font-medium"
+          >
+            <option value="">محاسبة الموصل (الكل)</option>
+            <option value="UNSETTLED">غير محاسب</option>
+            <option value="SETTLED">محاسب</option>
+          </select>
+
           {/* طريقة الدفع */}
           <select
             value={selectedPaymentMethod}
@@ -334,6 +357,7 @@ export default function Trips() {
                 </th>
                 <th className="py-3 px-4">حالة المشوار</th>
                 <th className="py-3 px-4">حالة الاستلام</th>
+                <th className="py-3 px-4">محاسبة الموصل</th>
                 <th className="py-3 px-4">طريقة الدفع</th>
                 <th className="py-3 px-4 text-center">الإجراءات</th>
               </tr>
@@ -341,7 +365,7 @@ export default function Trips() {
             <tbody className="divide-y divide-slate-100">
               {paginatedTrips.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-12">
+                  <td colSpan="10" className="py-12">
                     <EmptyState
                       title="لم يتم العثور على أي مشاوير"
                       description="جرّب تعديل مصطلحات البحث أو الفلاتر المحددة، أو سجّل مشواراً جديداً."
@@ -355,6 +379,7 @@ export default function Trips() {
                   const tripStatus = TRIP_STATUS_CONFIG[trip.status] || TRIP_STATUS_CONFIG.new;
                   const deliveryStatus = DELIVERY_STATUS_CONFIG[trip.deliveryStatus] || DELIVERY_STATUS_CONFIG.pending;
                   const paymentObj = PAYMENT_METHODS.find(m => m.id === trip.paymentMethod);
+                  const isDriverSettled = (trip.driverSettlementStatus || '').toUpperCase() === 'SETTLED';
 
                   return (
                     <tr key={trip.id} className="hover:bg-slate-50/80 transition-colors">
@@ -391,6 +416,16 @@ export default function Trips() {
                             {deliveryStatus.label}
                           </Badge>
                         </button>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          isDriverSettled
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isDriverSettled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          {isDriverSettled ? 'محاسب' : 'غير محاسب'}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
