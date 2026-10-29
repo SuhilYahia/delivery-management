@@ -1,0 +1,29 @@
+# Node dependencies
+node_modules/
+.npm/
+
+# Environment files & secrets
+.env
+.env.local
+.env.*.local
+!*.example
+
+# Build outputs
+dist/
+build/
+.output/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# PostgreSQL local data directory
+backend/db_data/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

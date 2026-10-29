@@ -1,0 +1,16 @@
+{
+  "name": "al-majd-delivery-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "نظام المجد لإدارة التوصيل والمشاوير والشركات - المرحلة الثانية Full-Stack",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "test": "npm --prefix backend run test",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:seed": "npm --prefix backend run prisma:seed",
+    "prisma:clean": "npm --prefix backend run prisma:clean"
+  }
+}

@@ -1,0 +1,243 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==================== التعدادات (Enums) ====================
+
+enum SystemRole {
+  SYSTEM_ADMIN
+  USER
+}
+
+enum CompanyRole {
+  COMPANY_ADMIN
+  STAFF
+  VIEWER
+}
+
+enum TripStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  CREDIT
+  OTHER
+}
+
+// ==================== النماذج (Models) ====================
+
+model Company {
+  id              String   @id @default(uuid())
+  name            String
+  managerName     String
+  phone           String?
+  email           String?
+  taxNumber       String?
+  crNumber        String?
+  city            String?  @default("الرياض")
+  address         String?
+  logo            String?
+  defaultCurrency String   @default("SAR")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships  CompanyMembership[]
+  drivers      Driver[]
+  trips        Trip[]
+  payments     Payment[]
+  pricingRules PricingRule[]
+  auditLogs    AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  systemRole   SystemRole @default(USER)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  memberships      CompanyMembership[]
+  paymentsRecorded Payment[]           @relation("PaymentRecordedBy")
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model CompanyMembership {
+  id        String      @id @default(uuid())
+  userId    String
+  companyId String
+  role      CompanyRole @default(STAFF)
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+  @@map("company_memberships")
+}
+
+model Driver {
+  id            String   @id @default(uuid())
+  companyId     String
+  name          String
+  phone         String
+  vehicleType   String?  @default("سيارة نقل")
+  licenseNumber String?
+  isActive      Boolean  @default(true)
+  isDeleted     Boolean  @default(false) // حذف منطقي لحماية المشاوير التاريخية
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trips   Trip[]
+
+  @@index([companyId])
+  @@map("drivers")
+}
+
+model Trip {
+  id                     String     @id @default(uuid())
+  tripNumber             String     // رقم المشوار مثل TRP-1001
+  companyId              String
+  driverId               String
+  orderNumber            String?
+  customerName           String
+  customerPhone          String?
+  deliveryAddress        String?
+  tripDate               DateTime   @db.Date
+  tripTime               String     // صيغة 24 ساعة "14:30"
+  durationMinutes        Int
+  cost                   Decimal    @db.Decimal(10, 2)
+  appliedPricingSnapshot Json       // نسخة من قواعد التسعير المطبقة وقت الإنشاء
+  status                 TripStatus @default(NEW)
+  cancelReason           String?
+  notes                  String?
+  adminNotes             String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  driver   Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  delivery Delivery?
+  payments Payment[]
+
+  @@index([companyId])
+  @@index([driverId])
+  @@index([tripDate])
+  @@index([status])
+  @@map("trips")
+}
+
+model Delivery {
+  id                 String         @id @default(uuid())
+  tripId             String         @unique
+  status             DeliveryStatus @default(PENDING)
+  actualDeliveryDate DateTime?      @db.Date
+  actualDeliveryTime String?
+  recipientName      String?
+  pendingReason      String?
+  nextDeliveryDate   DateTime?      @db.Date
+  failureReason      String?
+  returnDate         DateTime?      @db.Date
+  returnReason       String?
+  deliveryNotes      String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("deliveries")
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  companyId      String
+  tripId         String
+  amount         Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  paymentDate    DateTime      @default(now())
+  reference      String?
+  notes          String?
+  recordedById   String?
+  idempotencyKey String?       @unique // حماية من تكرار تسجيل الدفعة عند إعادة المحاولة
+  createdAt      DateTime      @default(now())
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trip       Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([tripId])
+  @@map("payments")
+}
+
+model PricingRule {
+  id              String   @id @default(uuid())
+  companyId       String
+  tier1MaxMinutes Int      @default(19)
+  tier1Price      Decimal  @default(20.00) @db.Decimal(10, 2)
+  tier2MaxMinutes Int      @default(29)
+  tier2Price      Decimal  @default(30.00) @db.Decimal(10, 2)
+  tier3MaxMinutes Int      @default(60)
+  tier3Price      Decimal  @default(50.00) @db.Decimal(10, 2)
+  extraHourRate   Decimal  @default(50.00) @db.Decimal(10, 2)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("pricing_rules")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  companyId String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
